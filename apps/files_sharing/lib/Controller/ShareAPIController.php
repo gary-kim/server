@@ -39,6 +39,7 @@ use OCP\AppFramework\OCS\OCSNotFoundException;
 use OCP\AppFramework\OCSController;
 use OCP\AppFramework\QueryException;
 use OCP\Constants;
+use OCP\Files\InvalidPathException;
 use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\IConfig;
@@ -786,6 +787,84 @@ class ShareAPIController extends OCSController {
 		return new DataResponse($formatted);
 	}
 
+
+	/**
+	 * The getSharesComlete function.
+	 * returns all shares relative to a file, including parent folders shares rights.
+	 *
+	 * @NoAdminRequired
+	 * @NoCSRFRequired
+	 *
+	 * @param string $path
+	 *
+	 * - Get shares by the current user
+	 * - Get shares by the current user and reshares (?reshares=true)
+	 * - Get shares with the current user (?shared_with_me=true)
+	 * - Get shares for a specific path (?path=...)
+	 * - Get all shares in a folder (?subfiles=true&path=..)
+	 *
+	 * @return DataResponse
+	 * @throws InvalidPathException
+	 * @throws NotFoundException
+	 * @throws OCSNotFoundException
+	 */
+	public function getSharesComplete(string $path): DataResponse {
+
+		// get Node from (string) path.
+		$userFolder = $this->rootFolder->getUserFolder($this->currentUser);
+		try {
+			$node = $userFolder->get($path);
+			$this->lock($node);
+		} catch (\OCP\Files\NotFoundException $e) {
+			throw new OCSNotFoundException($this->l->t('Wrong path, file/folder doesn\'t exist'));
+		} catch (LockedException $e) {
+			throw new OCSNotFoundException($this->l->t('Could not lock path'));
+		}
+
+		// initiate real owner.
+		$owner = $node->getOwner()
+					  ->getUID();
+		if (!$this->userManager->userExists($owner)) {
+			return new DataResponse([]);
+		}
+
+		// get node based on the owner, fix owner in case of external storage
+		$userFolder = $this->rootFolder->getUserFolder($owner);
+		if ($node->getId() !== $userFolder->getId() && !$userFolder->isSubNode($node)) {
+			$nodes = $userFolder->getById($node->getId());
+			$node = array_shift($nodes);
+			$owner = $node->getOwner()
+						  ->getUID();
+		}
+		$basePath = $userFolder->getPath();
+
+		// generate node list for each parent folders
+		/** @var Node[] $nodes */
+		$nodes = [];
+		while ($node->getPath() !== $basePath) {
+			$nodes[] = $node;
+			$node = $node->getParent();
+		}
+
+		// for each nodes, retrieve shares.
+		$shares = [];
+		foreach ($nodes as $node) {
+			$path = substr($node->getPath(), strlen($basePath));
+			// not the cleanest way, but the getShares() is glued to the controller.
+			$getShares = $this->getShares('false', 'false', 'false', $path, 'false');
+			$this->mergeFormattedShares($shares, $getShares->getData());
+		}
+
+		// removing keys from associative array
+		$formatted = [];
+		foreach ($shares as $share) {
+			$formatted[] = $share;
+		}
+
+		return new DataResponse($formatted);
+	}
+
+
 	/**
 	 * @NoAdminRequired
 	 *
@@ -1224,6 +1303,23 @@ class ShareAPIController extends OCSController {
 		}
 
 		return false;
+	}
+
+
+	/**
+	 * merging already formatted shares.
+	 * We'll make an associative array to easily detect duplicate Ids.
+	 * Keys _needs_ to be removed after all shares are retrieved and merged.
+	 *
+	 * @param array $shares
+	 * @param array $newShares
+	 */
+	private function mergeFormattedShares(array &$shares, array $newShares) {
+		foreach ($newShares as $newShare) {
+			if (!array_key_exists($newShare['id'], $shares)) {
+				$shares[$newShare['id']] = $newShare;
+			}
+		}
 	}
 
 }

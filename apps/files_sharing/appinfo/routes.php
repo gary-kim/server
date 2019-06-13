@@ -54,6 +54,11 @@ return [
 			'verb' => 'GET',
 		],
 		[
+			'name' => 'ShareAPI#getSharesComplete',
+			'url'  => '/api/v1/shares/all',
+			'verb' => 'GET',
+		],
+		[
 			'name' => 'ShareAPI#createShare',
 			'url'  => '/api/v1/shares',
 			'verb' => 'POST',

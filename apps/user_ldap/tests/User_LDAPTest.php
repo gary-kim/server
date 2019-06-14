@@ -35,6 +35,7 @@ use OC\User\Backend;
 use OC\User\Session;
 use OCA\User_LDAP\Access;
 use OCA\User_LDAP\Connection;
+use OCA\User_LDAP\Mapping\AbstractMapping;
 use OCA\User_LDAP\Mapping\UserMapping;
 use OCA\User_LDAP\User\Manager;
 use OCA\User_LDAP\User\OfflineUser;
@@ -1413,6 +1414,8 @@ class User_LDAPTest extends TestCase {
 	}
 
 	public function testCreateUserWithPlugin() {
+		$uid = 'alien6372';
+		$uuid = '123-2345-36756-123-2345234-4431';
 		$this->pluginManager->expects($this->once())
 			->method('implementsActions')
 			->with(Backend::CREATE_USER)
@@ -1421,8 +1424,14 @@ class User_LDAPTest extends TestCase {
 			->method('createUser')
 			->with('uid','password')
 			->willReturn('result');
+		$this->access->expects($this->atLeastOnce())
+			->method('getUUID')
+			->willReturn($uuid);
+		$this->access->expects($this->once())
+			->method('mapAndAnnounceIfApplicable')
+			->with($this->isInstanceOf(AbstractMapping::class), $this->anything(), $uid, $uuid, true);
 
-		$this->assertEquals($this->backend->createUser('uid', 'password'),true);
+		$this->assertEquals($this->backend->createUser($uid, 'password'),true);
 	}
 
 	public function testCreateUserFailing() {

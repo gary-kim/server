@@ -356,7 +356,10 @@ class UsersControllerTest extends TestCase {
 			->with('adminUser')
 			->willReturn(true);
 
-		$this->assertEquals([], $this->api->addUser('NewUser', 'PasswordOfTheNewUser')->getData());
+		$this->assertTrue(key_exists(
+			'UserID',
+			$this->api->addUser('NewUser', 'PasswordOfTheNewUser')->getData()
+		));
 	}
 
 	public function testAddUserSuccessfulWithDisplayName() {
@@ -413,7 +416,145 @@ class UsersControllerTest extends TestCase {
 			->method('editUser')
 			->with('NewUser', 'display', 'DisplayNameOfTheNewUser');
 
-		$this->assertEquals([], $api->addUser('NewUser', 'PasswordOfTheNewUser', 'DisplayNameOfTheNewUser')->getData());
+		$this->assertTrue(key_exists(
+			'UserID',
+			$this->api->addUser('NewUser', 'PasswordOfTheNewUser', 'DisplayNameOfTheNewUser')->getData()
+		));
+	}
+
+	public function testAddUserSuccessfulGenerateUserID() {
+		$this->config
+			->expects($this->any())
+			->method('getAppValue')
+			->willReturnCallback(function($appid, $key, $default) {
+				if($key === 'newUser.generateUserID') {
+					return true;
+				}
+				return null;
+			});
+		$this->userManager
+			->expects($this->once())
+			->method('userExists')
+			->with($this->anything())
+			->will($this->returnValue(false));
+		$this->userManager
+			->expects($this->once())
+			->method('createUser')
+			->with('NewUser', 'PasswordOfTheNewUser');
+		$this->logger
+			->expects($this->once())
+			->method('info')
+			->with('Successful addUser call with userid: NewUser', ['app' => 'ocs_api']);
+		$loggedInUser = $this->getMockBuilder(IUser::class)
+			->disableOriginalConstructor()
+			->getMock();
+		$loggedInUser
+			->expects($this->once())
+			->method('getUID')
+			->will($this->returnValue('adminUser'));
+		$this->userSession
+			->expects($this->once())
+			->method('getUser')
+			->will($this->returnValue($loggedInUser));
+		$this->groupManager
+			->expects($this->once())
+			->method('isAdmin')
+			->with('adminUser')
+			->willReturn(true);
+
+		$this->assertTrue(key_exists(
+			'UserID',
+			$this->api->addUser('', 'PasswordOfTheNewUser')->getData()
+		));
+	}
+
+	/**
+	 * @expectedException \OCP\AppFramework\OCS\OCSException
+	 * @expectedExceptionCode 111
+	 * @expectedExceptionMessage Could not create non-existing user id
+	 */
+	public function testAddUserFailedToGenerateUserID() {
+		$this->config
+			->expects($this->any())
+			->method('getAppValue')
+			->willReturnCallback(function($appid, $key, $default) {
+				if($key === 'newUser.generateUserID') {
+					return true;
+				}
+				return null;
+			});
+		$this->userManager
+			->expects($this->once())
+			->method('userExists')
+			->with($this->anything())
+			->will($this->returnValue(true));
+		$this->userManager
+			->expects($this->never())
+			->method('createUser');
+		$loggedInUser = $this->getMockBuilder(IUser::class)
+			->disableOriginalConstructor()
+			->getMock();
+		$loggedInUser
+			->expects($this->once())
+			->method('getUID')
+			->will($this->returnValue('adminUser'));
+		$this->userSession
+			->expects($this->once())
+			->method('getUser')
+			->will($this->returnValue($loggedInUser));
+		$this->groupManager
+			->expects($this->once())
+			->method('isAdmin')
+			->with('adminUser')
+			->willReturn(true);
+
+		$this->api->addUser('', 'PasswordOfTheNewUser')->getData();
+	}
+
+	/**
+	 * @expectedException \OCP\AppFramework\OCS\OCSException
+	 * @expectedExceptionCode 110
+	 * @expectedExceptionMessage Required email address was not provided
+	 */
+	public function testAddUserEmailRequired() {
+		$this->config
+			->expects($this->any())
+			->method('getAppValue')
+			->willReturnCallback(function($appid, $key, $default) {
+				if($key === 'newUser.requireEmail') {
+					return true;
+				}
+				return null;
+			});
+		$this->userManager
+			->expects($this->once())
+			->method('userExists')
+			->with('NewUser')
+			->will($this->returnValue(false));
+		$this->userManager
+			->expects($this->never())
+			->method('createUser');
+		$loggedInUser = $this->getMockBuilder(IUser::class)
+			->disableOriginalConstructor()
+			->getMock();
+		$loggedInUser
+			->expects($this->once())
+			->method('getUID')
+			->will($this->returnValue('adminUser'));
+		$this->userSession
+			->expects($this->once())
+			->method('getUser')
+			->will($this->returnValue($loggedInUser));
+		$this->groupManager
+			->expects($this->once())
+			->method('isAdmin')
+			->with('adminUser')
+			->willReturn(true);
+
+		$this->assertTrue(key_exists(
+			'UserID',
+			$this->api->addUser('NewUser', 'PasswordOfTheNewUser')->getData()
+		));
 	}
 
 	public function testAddUserExistingGroup() {
